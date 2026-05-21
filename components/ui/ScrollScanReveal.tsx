@@ -89,6 +89,7 @@ export default function ScrollScanReveal() {
         left:          0,
         width:         '100%',
         height:        60,
+        background:    'transparent',
         pointerEvents: 'none',
         zIndex:        40,
         willChange:    'transform',
@@ -135,7 +136,7 @@ export default function ScrollScanReveal() {
           height:          8,
           borderRadius:    '50%',
           backgroundColor: '#38BDF8',
-          boxShadow:       '0 0 12px #38BDF8, 0 0 4px #38BDF8',
+          boxShadow:       '0 0 12px #38BDF8, 0 0 24px rgba(56,189,248,0.4)',
         }}
       />
     </div>
