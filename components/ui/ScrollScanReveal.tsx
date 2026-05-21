@@ -80,66 +80,87 @@ export default function ScrollScanReveal() {
   }, [])
 
   return (
-    <div
-      ref={lineRef}
-      style={{
-        // Fixed in viewport; transform places it in document space
-        position:      'fixed',
-        top:           0,
-        left:          0,
-        width:         '100%',
-        height:        60,
-        background:    'transparent',
-        border:        '1px solid rgba(56,189,248,0.25)',
-        pointerEvents: 'none',
-        zIndex:        40,
-        willChange:    'transform',
-        // Hidden until first frame positions it correctly
-        opacity:       0,
-      }}
-      aria-hidden="true"
-    >
-      {/* Glowing horizontal scan line — centred inside the 60px band */}
-      <div
-        style={{
-          position:  'absolute',
-          top:       '50%',
-          left:      0,
-          right:     0,
-          height:    2,
-          transform: 'translateY(-50%)',
-          background: 'linear-gradient(to right, transparent 0%, rgba(56,189,248,0.6) 20%, rgba(56,189,248,0.6) 80%, transparent 100%)',
-          filter:    'blur(3px)',
-        }}
-      />
+    <>
+      {/* Keyframe for the sweeping highlight — injected locally, no globals.css touch */}
+      <style>{`
+        @keyframes scanSweep {
+          from { transform: translateX(-100%); }
+          to   { transform: translateX(350%); }
+        }
+      `}</style>
 
-      {/* Crisp 1 px core on top of the blurred glow */}
       <div
+        ref={lineRef}
         style={{
-          position:  'absolute',
-          top:       '50%',
-          left:      0,
-          right:     0,
-          height:    1,
-          transform: 'translateY(-50%)',
-          background: 'linear-gradient(to right, transparent 0%, rgba(56,189,248,0.9) 20%, rgba(56,189,248,0.9) 80%, transparent 100%)',
+          position:      'fixed',
+          top:           0,
+          left:          0,
+          width:         '100%',
+          height:        60,
+          background:    'transparent',
+          pointerEvents: 'none',
+          zIndex:        40,
+          willChange:    'transform',
+          opacity:       0,
         }}
-      />
+        aria-hidden="true"
+      >
+        {/* ── 2 px glowing line ────────────────────────────────── */}
+        <div
+          style={{
+            position:  'absolute',
+            top:       '50%',
+            left:      0,
+            width:     '100%',
+            height:    2,
+            transform: 'translateY(-50%)',
+            background: 'linear-gradient(to right, #38BDF8 0%, rgba(56,189,248,0.8) 20%, rgba(56,189,248,1) 50%, rgba(56,189,248,0.8) 80%, #38BDF8 100%)',
+            filter:    'blur(0.5px)',
+            boxShadow: '0 0 6px #38BDF8, 0 0 12px #38BDF8, 0 0 24px rgba(56,189,248,0.6), 0 0 40px rgba(56,189,248,0.3)',
+            overflow:  'hidden',
+          }}
+        >
+          {/* Sweeping highlight — left → right → left, infinite alternate */}
+          <div
+            style={{
+              position:  'absolute',
+              top:       0,
+              left:      0,
+              width:     '40%',
+              height:    '100%',
+              background: 'linear-gradient(to right, transparent, rgba(56,189,248,0.9), white, rgba(56,189,248,0.9), transparent)',
+              animation: 'scanSweep 2.5s ease-in-out infinite alternate',
+            }}
+          />
+        </div>
 
-      {/* Glowing dot at right end */}
-      <div
-        style={{
-          position:        'absolute',
-          top:             '50%',
-          right:           24,
-          transform:       'translateY(-50%)',
-          width:           8,
-          height:          8,
-          borderRadius:    '50%',
-          backgroundColor: '#38BDF8',
-          boxShadow:       '0 0 12px #38BDF8, 0 0 24px rgba(56,189,248,0.4)',
-        }}
-      />
-    </div>
+        {/* ── Glow halo bleeding downward ──────────────────────── */}
+        <div
+          style={{
+            position:  'absolute',
+            top:       'calc(50% + 1px)',
+            left:      0,
+            width:     '100%',
+            height:    8,
+            background: 'linear-gradient(to bottom, rgba(56,189,248,0.15), transparent)',
+          }}
+        />
+
+        {/* ── Glowing dot — left edge, vertically centred ──────── */}
+        <div
+          style={{
+            position:     'absolute',
+            top:          '50%',
+            left:         16,
+            transform:    'translateY(-50%)',
+            width:        10,
+            height:       10,
+            borderRadius: '50%',
+            background:   'white',
+            boxShadow:    '0 0 6px #38BDF8, 0 0 14px #38BDF8, 0 0 28px rgba(56,189,248,0.8)',
+          }}
+        />
+      </div>
+    </>
   )
 }
