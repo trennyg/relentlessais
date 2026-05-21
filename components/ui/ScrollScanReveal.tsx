@@ -98,6 +98,7 @@ export default function ScrollScanReveal() {
           width:         '100%',
           height:        60,
           background:    'transparent',
+          border:        'none',
           pointerEvents: 'none',
           zIndex:        40,
           willChange:    'transform',
@@ -108,31 +109,15 @@ export default function ScrollScanReveal() {
         {/* ── 2 px glowing line ────────────────────────────────── */}
         <div
           style={{
-            position:  'absolute',
-            top:       '50%',
-            left:      0,
-            width:     '100%',
-            height:    2,
-            transform: 'translateY(-50%)',
-            background: 'linear-gradient(to right, #38BDF8 0%, rgba(56,189,248,0.8) 20%, rgba(56,189,248,1) 50%, rgba(56,189,248,0.8) 80%, #38BDF8 100%)',
-            filter:    'blur(0.5px)',
-            boxShadow: '0 0 6px #38BDF8, 0 0 12px #38BDF8, 0 0 24px rgba(56,189,248,0.6), 0 0 40px rgba(56,189,248,0.3)',
-            overflow:  'hidden',
+            position:   'absolute',
+            left:       0,
+            right:      0,
+            height:     '2px',
+            background: 'linear-gradient(to right, #38BDF8, white, #38BDF8)',
+            boxShadow:  '0 0 8px #38BDF8, 0 0 20px #38BDF8, 0 0 40px rgba(56,189,248,0.8)',
+            zIndex:     9999,
           }}
-        >
-          {/* Sweeping highlight — left → right → left, infinite alternate */}
-          <div
-            style={{
-              position:  'absolute',
-              top:       0,
-              left:      0,
-              width:     '40%',
-              height:    '100%',
-              background: 'linear-gradient(to right, transparent, rgba(56,189,248,0.9), white, rgba(56,189,248,0.9), transparent)',
-              animation: 'scanSweep 2.5s ease-in-out infinite alternate',
-            }}
-          />
-        </div>
+        />
 
         {/* ── Glow halo bleeding downward ──────────────────────── */}
         <div
