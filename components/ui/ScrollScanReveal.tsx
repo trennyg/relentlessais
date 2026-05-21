@@ -25,13 +25,11 @@ export default function ScrollScanReveal() {
         // Bottom reached — clear mask, hide line
         main.style.maskImage       = ''
         main.style.webkitMaskImage = ''
-        line.style.opacity         = '0'
       } else {
         const mask = `linear-gradient(to bottom, black 0px, black ${y}px, transparent ${y + 2}px, transparent 100%)`
         main.style.maskImage       = mask
         main.style.webkitMaskImage = mask
         line.style.transform       = `translateY(${y}px)`
-        line.style.opacity         = '1'
       }
     }
 
@@ -82,7 +80,7 @@ export default function ScrollScanReveal() {
         zIndex:        99999,
         pointerEvents: 'none',
         willChange:    'transform',
-        opacity:       0, // RAF sets to 1 after first applyReveal
+        opacity:       1,
       }}
       aria-hidden="true"
     />
