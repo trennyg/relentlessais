@@ -62,7 +62,22 @@ export default function Services() {
           }}
         >
           {SERVICES.map((service, i) => (
-            <ServiceCard key={service.title} service={service} index={i} />
+            <div
+              key={service.title}
+              className="corner-trace-wrapper"
+              style={{ transition: 'transform 0.15s ease', transformStyle: 'preserve-3d' }}
+              onMouseMove={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect()
+                const x = (e.clientX - rect.left) / rect.width - 0.5
+                const y = (e.clientY - rect.top) / rect.height - 0.5
+                e.currentTarget.style.transform = `perspective(600px) rotateX(${-y * 10}deg) rotateY(${x * 10}deg) translateY(-4px)`
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = `perspective(600px) rotateX(0deg) rotateY(0deg) translateY(0px)`
+              }}
+            >
+              <ServiceCard service={service} index={i} />
+            </div>
           ))}
         </div>
       </div>

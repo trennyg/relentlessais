@@ -1,7 +1,7 @@
 'use client'
 
 interface CornerTraceProps {
-  duration?: number   // seconds per loop
+  duration?: number   // seconds per loop (kept for API compat)
   width?: number      // container width for SVG viewBox
   height?: number     // container height for SVG viewBox
   showBrackets?: boolean
@@ -15,9 +15,7 @@ export default function CornerTrace({
 }: CornerTraceProps) {
   const pad = 1
   const x1 = pad, y1 = pad, x2 = width - pad, y2 = height - pad
-  const perimPath = `M ${x1} ${y1} L ${x2} ${y1} L ${x2} ${y2} L ${x1} ${y2} Z`
   const bracketSize = 14
-  const pathId = `perim-${duration}-${width}-${height}`
   const filterId = `glow-ct-${duration}`
 
   return (
@@ -44,8 +42,40 @@ export default function CornerTrace({
         </filter>
       </defs>
 
+      <style>{`
+        @keyframes borderTrace {
+          from { stroke-dashoffset: 1; }
+          to   { stroke-dashoffset: 0; }
+        }
+        rect.hover-border {
+          stroke-dasharray: 1;
+          stroke-dashoffset: 1;
+          transition: stroke-dashoffset 0.6s linear;
+        }
+        .corner-trace-wrapper:hover rect.hover-border {
+          stroke-dashoffset: 0;
+          transition: stroke-dashoffset 1.2s linear;
+        }
+      `}</style>
+
       {/* Static dim border */}
       <rect x={x1} y={y1} width={x2 - x1} height={y2 - y1} fill="none" stroke="#1A1A1A" strokeWidth="1" />
+
+      {/* Hover border trace — draws electric blue perimeter on parent hover */}
+      <rect
+        className="hover-border"
+        x={x1}
+        y={y1}
+        width={x2 - x1}
+        height={y2 - y1}
+        fill="none"
+        stroke="#38BDF8"
+        strokeWidth="1.5"
+        filter={`url(#${filterId})`}
+        pathLength="1"
+        strokeDasharray="1"
+        strokeDashoffset="1"
+      />
 
       {/* Bracket corners */}
       {showBrackets && (
@@ -72,25 +102,6 @@ export default function CornerTrace({
           />
         </>
       )}
-
-      {/* Hidden perimeter path for animateMotion */}
-      <path id={pathId} d={perimPath} fill="none" stroke="none" />
-
-      {/* Travelling glow dot */}
-      <g filter={`url(#${filterId})`}>
-        {/* Outer halo */}
-        <circle r="8" fill="#38BDF8" opacity="0.12">
-          <animateMotion dur={`${duration}s`} repeatCount="indefinite">
-            <mpath href={`#${pathId}`} />
-          </animateMotion>
-        </circle>
-        {/* Bright core */}
-        <circle r="3" fill="#38BDF8">
-          <animateMotion dur={`${duration}s`} repeatCount="indefinite">
-            <mpath href={`#${pathId}`} />
-          </animateMotion>
-        </circle>
-      </g>
     </svg>
   )
 }
