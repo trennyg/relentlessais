@@ -8,14 +8,11 @@ import Work from '@/components/sections/Work'
 import Testimonials from '@/components/sections/Testimonials'
 import About from '@/components/sections/About'
 import Contact from '@/components/sections/Contact'
-import ScrollScanReveal from '@/components/ui/ScrollScanReveal'
-
 export default function Home() {
   return (
     <>
       <CustomCursor />
       <Navbar />
-      <ScrollScanReveal />
       <main style={{ position: 'relative' }}>
         <Hero />
         <ScanLineDivider />

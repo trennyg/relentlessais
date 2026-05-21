@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Syne, DM_Sans, DM_Mono } from 'next/font/google'
 import './globals.css'
 import ClientLayout from '@/components/ClientLayout'
+import ScrollScanReveal from '@/components/ui/ScrollScanReveal'
 
 const syne = Syne({
   subsets: ['latin'],
@@ -50,6 +51,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${syne.variable} ${dmSans.variable} ${dmMono.variable}`}>
       <body>
+        <ScrollScanReveal />
         <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
