@@ -1,26 +1,78 @@
 @import "tailwindcss";
 
+@theme {
+  --color-bg: #080808;
+  --color-card: #111111;
+  --color-accent: #D4F044;
+  --color-accent-dim: #9DB030;
+  --color-text-primary: #F0EDE6;
+  --color-text-muted: #888480;
+  --color-border: #222222;
+
+  --font-display: 'Syne', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-primary: #080808;
+  --bg-secondary: #111111;
+  --bg-tertiary: #1A1A1A;
+  --text-primary: #F0EDE6;
+  --text-secondary: #888480;
+  --accent: #D4F044;
+  --accent-dim: #9DB030;
+  --border: #222222;
+  --font-display: var(--font-syne, 'Syne', sans-serif);
+  --font-body: var(--font-dm-sans, 'DM Sans', sans-serif);
+  --font-mono: var(--font-dm-mono, 'DM Mono', monospace);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #080808;
+  color: #F0EDE6;
+  font-family: var(--font-body), sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+/* Grain overlay — used on Hero and About */
+.grain::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
+  opacity: 0.035;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #080808; }
+::-webkit-scrollbar-thumb { background: #1A1A1A; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #333; }
+
+/* Selection */
+::selection { background: #D4F044; color: #080808; }
+
+/* Blinking cursor for typing animation */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.blink { animation: blink 0.9s step-end infinite; }
+
+/* Scroll snap for mobile testimonials */
+.snap-x { scroll-snap-type: x mandatory; }
+.snap-start { scroll-snap-align: start; }
