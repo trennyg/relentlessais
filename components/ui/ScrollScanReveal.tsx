@@ -24,7 +24,7 @@ export default function ScrollScanReveal() {
 
     const update = () => {
       const y = window.scrollY + window.innerHeight
-      line.style.transform = `translateY(${y}px)`
+      line.style.transform = `translateY(${window.innerHeight - 3}px)`
       if (main) {
         main.style.maskImage = `linear-gradient(to bottom, black ${y}px, transparent ${y}px)`
         main.style.webkitMaskImage = `linear-gradient(to bottom, black ${y}px, transparent ${y}px)`
