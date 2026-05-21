@@ -90,6 +90,7 @@ export default function ScrollScanReveal() {
         width:         '100%',
         height:        60,
         background:    'transparent',
+        border:        '1px solid rgba(56,189,248,0.25)',
         pointerEvents: 'none',
         zIndex:        40,
         willChange:    'transform',
