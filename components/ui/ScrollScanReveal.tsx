@@ -6,6 +6,12 @@ export default function ScrollScanReveal() {
   const lineRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    const style = document.createElement('style')
+    style.innerHTML = `#ais-scan-line { background: #38BDF8 !important; box-shadow: 0 0 8px #38BDF8, 0 0 20px #38BDF8, 0 0 40px rgba(56,189,248,0.6) !important; height: 3px !important; opacity: 1 !important; }`
+    document.head.appendChild(style)
+  }, [])
+
+  useEffect(() => {
     // Respect prefers-reduced-motion — skip everything, leave page fully visible
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
@@ -68,6 +74,7 @@ export default function ScrollScanReveal() {
   // RAF sets transform + opacity directly on this element.
   return (
     <div
+      id="ais-scan-line"
       ref={lineRef}
       style={{
         position:      'fixed',
