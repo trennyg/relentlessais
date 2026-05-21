@@ -51,8 +51,11 @@ function useTypingEffect(words: string[], shouldReduce: boolean) {
 export default function Hero() {
   const shouldReduce = useReducedMotion() ?? false
   const { displayText } = useTypingEffect(TYPING_WORDS, shouldReduce)
-  const [mbOpacity, setMbOpacity] = useState(0)
   const [scrolled, setScrolled] = useState(false)
+  const [mbActive, setMbActive] = useState(false)
+  const [mbMouseX, setMbMouseX] = useState(0)
+  const [mbMouseY, setMbMouseY] = useState(0)
+  const sectionRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     const onWheel = () => setScrolled(true)
@@ -71,8 +74,17 @@ export default function Hero() {
   const words1 = ['We', 'build', 'digital']
   const words2 = ['products', 'that']
 
+  const handleMouseMove = (e: React.MouseEvent<HTMLElement>) => {
+    const rect = sectionRef.current?.getBoundingClientRect()
+    if (!rect) return
+    setMbMouseX(e.clientX - rect.left)
+    setMbMouseY(e.clientY - rect.top)
+    if (!mbActive) setMbActive(true)
+  }
+
   return (
     <section
+      ref={sectionRef}
       className="grain"
       style={{
         position: 'relative',
@@ -85,8 +97,8 @@ export default function Hero() {
         overflow: 'hidden',
         backgroundColor: '#080808',
       }}
-      onMouseEnter={() => setMbOpacity(1)}
-      onMouseLeave={() => setMbOpacity(0)}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => setMbActive(false)}
     >
       {/* Radial gradient */}
       <div style={{
@@ -96,7 +108,7 @@ export default function Hero() {
       }} />
 
       {/* Motherboard background */}
-      <MotherboardBg opacity={mbOpacity} />
+      <MotherboardBg mouseX={mbMouseX} mouseY={mbMouseY} active={mbActive} />
 
       {/* Content z-index 1 */}
       <div style={{ position: 'relative', zIndex: 1, maxWidth: 900, width: '100%', textAlign: 'center' }}>

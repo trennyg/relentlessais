@@ -93,10 +93,22 @@ function StatBlock({
 
 export default function About() {
   const shouldReduce = useReducedMotion() ?? false
-  const [mbOpacity, setMbOpacity] = useState(0)
+  const [mbActive, setMbActive] = useState(false)
+  const [mbMouseX, setMbMouseX] = useState(0)
+  const [mbMouseY, setMbMouseY] = useState(0)
+  const sectionRef = useRef<HTMLElement>(null)
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLElement>) => {
+    const rect = sectionRef.current?.getBoundingClientRect()
+    if (!rect) return
+    setMbMouseX(e.clientX - rect.left)
+    setMbMouseY(e.clientY - rect.top)
+    if (!mbActive) setMbActive(true)
+  }
 
   return (
     <section
+      ref={sectionRef}
       id="about"
       style={{
         position: 'relative',
@@ -104,10 +116,10 @@ export default function About() {
         padding: 'clamp(80px, 10vw, 120px) 24px',
         overflow: 'hidden',
       }}
-      onMouseEnter={() => setMbOpacity(1)}
-      onMouseLeave={() => setMbOpacity(0)}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => setMbActive(false)}
     >
-      <MotherboardBg opacity={mbOpacity} />
+      <MotherboardBg mouseX={mbMouseX} mouseY={mbMouseY} active={mbActive} />
 
       <div
         style={{
