@@ -1,6 +1,5 @@
 'use client'
 import { motion } from 'framer-motion'
-import CornerTrace from './CornerTrace'
 import { Service } from '@/lib/constants'
 
 interface ServiceCardProps {
@@ -29,8 +28,6 @@ export default function ServiceCard({ service, index }: ServiceCardProps) {
         borderColor: 'rgba(56,189,248,0.3)',
       }}
     >
-      <CornerTrace duration={3} width={400} height={300} showBrackets={true} />
-
       {/* Icon */}
       <div
         style={{
