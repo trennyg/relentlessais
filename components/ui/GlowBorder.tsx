@@ -35,21 +35,6 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
   const cardH         = useRef(0)
   const shouldReduce  = useReducedMotion() ?? false
 
-  // ── paintBorder: card border rect in canvas coordinates ──────────────────
-  // Always drawn at globalAlpha=1 regardless of comet visibility.
-  const paintBorder = useCallback(
-    (ctx: CanvasRenderingContext2D, w: number, h: number, hovered: boolean) => {
-      ctx.save()
-      ctx.globalCompositeOperation = 'source-over'
-      ctx.globalAlpha  = 1
-      ctx.strokeStyle  = hovered ? 'rgba(56,189,248,0.45)' : 'rgba(56,189,248,0.25)'
-      ctx.lineWidth    = 1
-      ctx.strokeRect(OVERFLOW + 0.5, OVERFLOW + 0.5, w - 1, h - 1)
-      ctx.restore()
-    },
-    [],
-  )
-
   // ── rAF drawing loop ──────────────────────────────────────────────────────
   const drawFrame = useCallback(
     (timestamp: number) => {
@@ -69,9 +54,6 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
       }
 
       ctx.clearRect(0, 0, cw, ch)
-
-      // ── Border — redrawn every frame at full opacity ──────────────────────
-      paintBorder(ctx, w, h, isHoveredRef.current)
 
       // ── Comet — only when partially/fully visible ─────────────────────────
       const ca = cometAlphaRef.current
@@ -171,7 +153,7 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
         rafRef.current = requestAnimationFrame(drawFrame)
       }
     },
-    [paintBorder],
+    [],
   )
 
   // ── Mouse handlers ────────────────────────────────────────────────────────
@@ -222,8 +204,7 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
         canvas.width  = cw
         canvas.height = ch
       }
-      // Trigger one rAF so drawFrame repaints the border at the correct size
-      // immediately, even when the comet loop is not running
+      // Trigger one rAF so the comet repaints at the correct size if active
       cancelAnimationFrame(rafRef.current)
       rafRef.current = requestAnimationFrame(drawFrame)
     }
@@ -236,7 +217,7 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
       ro.disconnect()
       cancelAnimationFrame(rafRef.current)
     }
-  }, [paintBorder, drawFrame])
+  }, [drawFrame])
 
   // ── Reduced-motion fallback ───────────────────────────────────────────────
   if (shouldReduce) {
@@ -262,8 +243,7 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
       style={{
         position:       'relative',
         background:     '#111111',
-        // No CSS border — border is drawn on canvas so it always matches
-        // the exact canvas coordinate space regardless of card height.
+        border:         '1px solid rgba(56,189,248,0.25)',
         borderRadius:   2,
         transition:     'transform 0.15s ease',
         transformStyle: 'preserve-3d',
