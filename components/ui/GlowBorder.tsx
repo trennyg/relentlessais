@@ -40,89 +40,115 @@ function buildTrail(
   return pts
 }
 
-// ── Draw one comet (trail + hot-point bloom) ──────────────────────────────────
+// ── Draw one comet (smoke + trail + hot-point bloom) ─────────────────────────
 // ctx.globalAlpha must be pre-set by the caller for the comet-fade effect.
-// rgb:        body colour  [r, g, b]
-// alphaScale: intensity multiplier (1.0 = full, 0.70 = ghost comet)
+// pts:        N_TRAIL+1 canvas-coord points (tail → head)
+// smokePts:   N_TRAIL+1 points for the TRAIL_FRACTION region behind the tail
+// rgb:        body colour [r, g, b]
+// alphaScale: relative intensity (1.0 = blue comet, 0.70 = ghost white comet)
+//
+// All blur via ctx.shadowBlur (GPU-composited) — no ctx.filter is used.
 function drawComet(
   ctx:        CanvasRenderingContext2D,
   pts:        [number, number][],
-  smokePts:   [number, number][],   // TRAIL_FRACTION further back than pts
+  smokePts:   [number, number][],
   rgb:        [number, number, number],
   alphaScale: number,
 ): void {
   const [hx, hy] = pts[N_TRAIL]
   const [r0, g0, b0] = rgb
+  const rStr = `${r0},${g0},${b0}`
 
-  // Body colour → white-hot tip in final 10% of trail
-  const trailColor = (p: number, scale: number): string => {
-    const alpha     = p * scale * alphaScale
+  ctx.lineCap  = 'butt'
+  ctx.lineJoin = 'round'
+
+  // ── SMOKE / AFTERGLOW — drawn first so it sits underneath the comet ───────
+  // Covers the TRAIL_FRACTION region behind the main tail.
+  // Single path with gradient stroke; shadowBlur provides the soft bleed.
+  {
+    const sg = ctx.createLinearGradient(
+      smokePts[0][0], smokePts[0][1],
+      smokePts[N_TRAIL][0], smokePts[N_TRAIL][1],
+    )
+    sg.addColorStop(0, `rgba(${rStr},0)`)
+    sg.addColorStop(1, `rgba(${rStr},${(0.06 * alphaScale).toFixed(3)})`)
+
+    ctx.save()
+    ctx.shadowBlur  = 30
+    ctx.shadowColor = `rgba(${rStr},${(0.15 * alphaScale).toFixed(3)})`
+    ctx.lineWidth   = 6
+    ctx.strokeStyle = sg
+    ctx.beginPath()
+    ctx.moveTo(smokePts[0][0], smokePts[0][1])
+    for (let i = 1; i <= N_TRAIL; i++) ctx.lineTo(smokePts[i][0], smokePts[i][1])
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  // ── PASS 1: Broad ambient glow — single path, GPU shadowBlur ─────────────
+  // Skip first 8 segments so near-zero-alpha tail pixels have no geometry
+  // for the shadow to smear into a dot artefact.
+  {
+    const ag = ctx.createLinearGradient(
+      pts[8][0], pts[8][1],
+      pts[N_TRAIL][0], pts[N_TRAIL][1],
+    )
+    ag.addColorStop(0, `rgba(${rStr},0)`)
+    ag.addColorStop(1, `rgba(${rStr},${(0.45 * alphaScale).toFixed(3)})`)
+
+    ctx.save()
+    ctx.shadowBlur  = 20
+    ctx.shadowColor = `rgba(${rStr},${(0.50 * alphaScale).toFixed(3)})`
+    ctx.lineWidth   = 10
+    ctx.strokeStyle = ag
+    ctx.beginPath()
+    ctx.moveTo(pts[8][0], pts[8][1])
+    for (let i = 9; i <= N_TRAIL; i++) ctx.lineTo(pts[i][0], pts[i][1])
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  // ── PASS 2: Medium glow — single path, lighter shadowBlur ────────────────
+  {
+    const mg = ctx.createLinearGradient(
+      pts[0][0], pts[0][1],
+      pts[N_TRAIL][0], pts[N_TRAIL][1],
+    )
+    mg.addColorStop(0, `rgba(${rStr},0)`)
+    mg.addColorStop(1, `rgba(${rStr},${(0.85 * alphaScale).toFixed(3)})`)
+
+    ctx.save()
+    ctx.shadowBlur  = 6
+    ctx.shadowColor = `rgba(${rStr},${(0.40 * alphaScale).toFixed(3)})`
+    ctx.lineWidth   = 4
+    ctx.strokeStyle = mg
+    ctx.beginPath()
+    ctx.moveTo(pts[0][0], pts[0][1])
+    for (let i = 1; i <= N_TRAIL; i++) ctx.lineTo(pts[i][0], pts[i][1])
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  // ── PASS 3: Sharp core — per-segment, no shadow, blue body → white-hot tip ─
+  ctx.shadowBlur = 0   // save/restore above restores 0, but be explicit
+  ctx.lineWidth  = 2
+  for (let i = 0; i < N_TRAIL; i++) {
+    const p         = i / N_TRAIL
+    const alpha     = p * alphaScale
     const whiteness = Math.max(0, (p - 0.90) / 0.10)
     const r = Math.round(r0 + (255 - r0) * whiteness)
     const g = Math.round(g0 + (255 - g0) * whiteness)
     const b = Math.round(b0 + (255 - b0) * whiteness)
-    return `rgba(${r},${g},${b},${alpha.toFixed(3)})`
-  }
-
-  // All passes use butt caps — eliminates the round dot artefact at pts[0]
-  ctx.lineCap  = 'butt'
-  ctx.lineJoin = 'round'
-
-  // Pass 1 — broad ambient glow (per-segment with butt cap, blurred)
-  ctx.save()
-  ctx.filter    = 'blur(20px)'
-  ctx.lineWidth = 10
-  for (let i = 0; i < N_TRAIL; i++) {
-    ctx.strokeStyle = trailColor(i / N_TRAIL, 0.45)
-    ctx.beginPath()
-    ctx.moveTo(pts[i][0], pts[i][1])
-    ctx.lineTo(pts[i + 1][0], pts[i + 1][1])
-    ctx.stroke()
-  }
-  ctx.restore()
-
-  // Pass 2 — medium glow, per-segment alpha
-  ctx.save()
-  ctx.filter    = 'blur(5px)'
-  ctx.lineWidth = 4
-  for (let i = 0; i < N_TRAIL; i++) {
-    ctx.strokeStyle = trailColor(i / N_TRAIL, 0.85)
-    ctx.beginPath()
-    ctx.moveTo(pts[i][0], pts[i][1])
-    ctx.lineTo(pts[i + 1][0], pts[i + 1][1])
-    ctx.stroke()
-  }
-  ctx.restore()
-
-  // Pass 3 — sharp core, per-segment
-  ctx.lineWidth = 2
-  for (let i = 0; i < N_TRAIL; i++) {
-    ctx.strokeStyle = trailColor(i / N_TRAIL, 1.0)
+    ctx.strokeStyle = `rgba(${r},${g},${b},${alpha.toFixed(3)})`
     ctx.beginPath()
     ctx.moveTo(pts[i][0], pts[i][1])
     ctx.lineTo(pts[i + 1][0], pts[i + 1][1])
     ctx.stroke()
   }
 
-  // Pass 4 — smoke / afterglow (region behind the main tail)
-  // Opacity ramps 0 at far end → 0.12 at join with main trail.
-  ctx.save()
-  ctx.filter    = 'blur(28px)'
-  ctx.lineWidth = 8
-  ctx.lineCap   = 'butt'
-  for (let i = 0; i < N_TRAIL; i++) {
-    const alpha = (i / N_TRAIL) * 0.12 * alphaScale
-    ctx.strokeStyle = `rgba(${r0},${g0},${b0},${alpha.toFixed(3)})`
-    ctx.beginPath()
-    ctx.moveTo(smokePts[i][0], smokePts[i][1])
-    ctx.lineTo(smokePts[i + 1][0], smokePts[i + 1][1])
-    ctx.stroke()
-  }
-  ctx.restore()
-
-  // ── Hot-point bloom — 4 radial gradients with additive compositing ────────
+  // ── HOT-POINT BLOOM — 4 radial gradients, additive compositing ───────────
+  ctx.shadowBlur = 0   // prevent shadow bleed into bloom gradients
   ctx.globalCompositeOperation = 'lighter'
-  const rStr = `${r0},${g0},${b0}`
 
   // Layer 4: outer halo bleed  r = 160
   const l4 = ctx.createRadialGradient(hx, hy, 0, hx, hy, 160)
@@ -130,7 +156,7 @@ function drawComet(
   l4.addColorStop(1, `rgba(${rStr},0)`)
   ctx.fillStyle = l4; ctx.beginPath(); ctx.arc(hx, hy, 160, 0, Math.PI * 2); ctx.fill()
 
-  // Layer 3: blue spread  r = 80
+  // Layer 3: spread  r = 80
   const l3 = ctx.createRadialGradient(hx, hy, 0, hx, hy, 80)
   l3.addColorStop(0, `rgba(${rStr},${(0.30 * alphaScale).toFixed(3)})`)
   l3.addColorStop(1, `rgba(${rStr},0)`)
@@ -192,14 +218,14 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
         const headT =
           ((timestamp - startTimeRef.current) / 1000 % ORBIT_DURATION) / ORBIT_DURATION
 
-        // Comet A: blue  — at headT
-        const ptsA      = buildTrail(headT,                    w, h, OVERFLOW)
-        const smokeA    = buildTrail(headT       - TRAIL_FRACTION, w, h, OVERFLOW)
-        // Comet B: ghost white — half perimeter behind (headT + 0.5 wraps via perimPoint)
-        const ptsB      = buildTrail(headT + 0.5,              w, h, OVERFLOW)
-        const smokeB    = buildTrail(headT + 0.5 - TRAIL_FRACTION, w, h, OVERFLOW)
+        // Comet A: blue — at headT
+        const ptsA   = buildTrail(headT,                    w, h, OVERFLOW)
+        const smokeA = buildTrail(headT       - TRAIL_FRACTION, w, h, OVERFLOW)
+        // Comet B: ghost white — half perimeter behind
+        const ptsB   = buildTrail(headT + 0.5,              w, h, OVERFLOW)
+        const smokeB = buildTrail(headT + 0.5 - TRAIL_FRACTION, w, h, OVERFLOW)
 
-        // Apply fade to both comets via globalAlpha
+        // Apply comet-fade to all draw calls via globalAlpha
         ctx.globalAlpha = ca
         ctx.globalCompositeOperation = 'source-over'
 
