@@ -17,15 +17,8 @@ export default function ServiceCard({ service, index }: ServiceCardProps) {
       style={{
         position: 'relative',
         backgroundColor: '#111111',
-        border: '1px solid #1A1A1A',
-        borderRadius: 2,
         padding: 32,
-        transition: 'border-color 0.25s ease, transform 0.25s ease',
-      }}
-      whileHover={{
-        y: -4,
-        boxShadow: '0 0 24px rgba(56,189,248,0.08)',
-        borderColor: 'rgba(56,189,248,0.3)',
+        transition: 'transform 0.25s ease',
       }}
     >
       {/* Icon */}
