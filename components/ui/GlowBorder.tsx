@@ -25,131 +25,157 @@ function perimPoint(t: number, w: number, h: number): [number, number] {
 }
 
 export default function GlowBorder({ children, className }: GlowBorderProps) {
-  const wrapperRef   = useRef<HTMLDivElement>(null)
-  const canvasRef    = useRef<HTMLCanvasElement>(null)
-  const rafRef       = useRef<number>(0)
-  const startTimeRef = useRef<number>(0)
-  const isHoveredRef = useRef(false)
-  const opacityRef   = useRef(0)        // drives canvas.style.opacity (comet only)
-  const shouldReduce = useReducedMotion() ?? false
+  const wrapperRef    = useRef<HTMLDivElement>(null)
+  const canvasRef     = useRef<HTMLCanvasElement>(null)
+  const rafRef        = useRef<number>(0)
+  const startTimeRef  = useRef<number>(0)
+  const isHoveredRef  = useRef(false)
+  const cometAlphaRef = useRef(0)   // 0..1 — comet fade via ctx.globalAlpha
+  const shouldReduce  = useReducedMotion() ?? false
 
-  // ── rAF loop — draws only the comet; CSS border is always handled by the div ──
-  const drawFrame = useCallback((timestamp: number) => {
-    const canvas  = canvasRef.current
-    const wrapper = wrapperRef.current
-    if (!canvas || !wrapper) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
+  // ── paintBorder: card border rect in canvas coordinates ──────────────────
+  // Always drawn at globalAlpha=1 regardless of comet visibility.
+  const paintBorder = useCallback(
+    (ctx: CanvasRenderingContext2D, w: number, h: number, hovered: boolean) => {
+      ctx.save()
+      ctx.globalCompositeOperation = 'source-over'
+      ctx.globalAlpha  = 1
+      ctx.strokeStyle  = hovered ? 'rgba(56,189,248,0.45)' : 'rgba(56,189,248,0.25)'
+      ctx.lineWidth    = 1
+      ctx.strokeRect(OVERFLOW + 0.5, OVERFLOW + 0.5, w - 1, h - 1)
+      ctx.restore()
+    },
+    [],
+  )
 
-    const w  = wrapper.offsetWidth
-    const h  = wrapper.offsetHeight
-    const cw = w + OVERFLOW * 2
-    const ch = h + OVERFLOW * 2
-    if (canvas.width !== cw || canvas.height !== ch) {
-      canvas.width  = cw
-      canvas.height = ch
-    }
+  // ── rAF drawing loop ──────────────────────────────────────────────────────
+  const drawFrame = useCallback(
+    (timestamp: number) => {
+      const canvas  = canvasRef.current
+      const wrapper = wrapperRef.current
+      if (!canvas || !wrapper) return
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
 
-    ctx.clearRect(0, 0, cw, ch)
+      const w  = wrapper.offsetWidth
+      const h  = wrapper.offsetHeight
+      const cw = w + OVERFLOW * 2
+      const ch = h + OVERFLOW * 2
+      if (canvas.width !== cw || canvas.height !== ch) {
+        canvas.width  = cw
+        canvas.height = ch
+      }
 
-    // ── Head position (4 s orbit) ─────────────────────────────────────────
-    if (!startTimeRef.current) startTimeRef.current = timestamp
-    const headT =
-      ((timestamp - startTimeRef.current) / 1000 % ORBIT_DURATION) / ORBIT_DURATION
+      ctx.clearRect(0, 0, cw, ch)
 
-    // ── Trail: index 0 = tail, index N = head ────────────────────────────
-    const pts: [number, number][] = []
-    for (let i = 0; i <= N_TRAIL; i++) {
-      const t = headT - TRAIL_FRACTION + (i / N_TRAIL) * TRAIL_FRACTION
-      const [px, py] = perimPoint(t, w, h)
-      pts.push([px + OVERFLOW, py + OVERFLOW])
-    }
-    const [hx, hy] = pts[N_TRAIL]
+      // ── Border — redrawn every frame at full opacity ──────────────────────
+      paintBorder(ctx, w, h, isHoveredRef.current)
 
-    // Colour helper: blue body → white tip in final 10%
-    const trailColor = (p: number, scale: number): string => {
-      const alpha     = p * scale
-      const whiteness = Math.max(0, (p - 0.90) / 0.10)
-      const r = Math.round(56  + (255 - 56)  * whiteness)
-      const g = Math.round(189 + (255 - 189) * whiteness)
-      const b = Math.round(248 + (255 - 248) * whiteness)
-      return `rgba(${r},${g},${b},${alpha.toFixed(3)})`
-    }
+      // ── Comet — only when partially/fully visible ─────────────────────────
+      const ca = cometAlphaRef.current
+      if (ca > 0) {
+        if (!startTimeRef.current) startTimeRef.current = timestamp
+        const headT =
+          ((timestamp - startTimeRef.current) / 1000 % ORBIT_DURATION) / ORBIT_DURATION
 
-    ctx.globalCompositeOperation = 'source-over'
-    ctx.lineCap  = 'round'
-    ctx.lineJoin = 'round'
+        const pts: [number, number][] = []
+        for (let i = 0; i <= N_TRAIL; i++) {
+          const t = headT - TRAIL_FRACTION + (i / N_TRAIL) * TRAIL_FRACTION
+          const [px, py] = perimPoint(t, w, h)
+          pts.push([px + OVERFLOW, py + OVERFLOW])
+        }
+        const [hx, hy] = pts[N_TRAIL]
 
-    // Pass 1 — broad ambient glow (single path, blurred)
-    ctx.save()
-    ctx.filter      = 'blur(20px)'
-    ctx.lineWidth   = 10
-    ctx.strokeStyle = 'rgba(56,189,248,0.45)'
-    ctx.beginPath()
-    ctx.moveTo(pts[0][0], pts[0][1])
-    for (let i = 1; i <= N_TRAIL; i++) ctx.lineTo(pts[i][0], pts[i][1])
-    ctx.stroke()
-    ctx.restore()
+        // Colour helper: blue body → white tip in final 10%
+        const trailColor = (p: number, scale: number): string => {
+          const alpha     = p * scale
+          const whiteness = Math.max(0, (p - 0.90) / 0.10)
+          const r = Math.round(56  + (255 - 56)  * whiteness)
+          const g = Math.round(189 + (255 - 189) * whiteness)
+          const b = Math.round(248 + (255 - 248) * whiteness)
+          return `rgba(${r},${g},${b},${alpha.toFixed(3)})`
+        }
 
-    // Pass 2 — medium glow, per-segment alpha
-    ctx.save()
-    ctx.filter    = 'blur(5px)'
-    ctx.lineWidth = 4
-    for (let i = 0; i < N_TRAIL; i++) {
-      ctx.strokeStyle = trailColor(i / N_TRAIL, 0.85)
-      ctx.beginPath()
-      ctx.moveTo(pts[i][0], pts[i][1])
-      ctx.lineTo(pts[i + 1][0], pts[i + 1][1])
-      ctx.stroke()
-    }
-    ctx.restore()
+        // Apply comet fade via globalAlpha — paintBorder is already done at 1
+        ctx.globalAlpha = ca
+        ctx.globalCompositeOperation = 'source-over'
+        ctx.lineCap  = 'round'
+        ctx.lineJoin = 'round'
 
-    // Pass 3 — sharp core, per-segment
-    ctx.lineWidth = 2
-    for (let i = 0; i < N_TRAIL; i++) {
-      ctx.strokeStyle = trailColor(i / N_TRAIL, 1.0)
-      ctx.beginPath()
-      ctx.moveTo(pts[i][0], pts[i][1])
-      ctx.lineTo(pts[i + 1][0], pts[i + 1][1])
-      ctx.stroke()
-    }
+        // Pass 1 — broad ambient glow (single path, blurred)
+        ctx.save()
+        ctx.filter      = 'blur(20px)'
+        ctx.lineWidth   = 10
+        ctx.strokeStyle = 'rgba(56,189,248,0.45)'
+        ctx.beginPath()
+        ctx.moveTo(pts[0][0], pts[0][1])
+        for (let i = 1; i <= N_TRAIL; i++) ctx.lineTo(pts[i][0], pts[i][1])
+        ctx.stroke()
+        ctx.restore()
 
-    // ── Hot point — 4 radial gradients, additive bloom ───────────────────
-    ctx.globalCompositeOperation = 'lighter'
+        // Pass 2 — medium glow, per-segment alpha
+        ctx.save()
+        ctx.filter    = 'blur(5px)'
+        ctx.lineWidth = 4
+        for (let i = 0; i < N_TRAIL; i++) {
+          ctx.strokeStyle = trailColor(i / N_TRAIL, 0.85)
+          ctx.beginPath()
+          ctx.moveTo(pts[i][0], pts[i][1])
+          ctx.lineTo(pts[i + 1][0], pts[i + 1][1])
+          ctx.stroke()
+        }
+        ctx.restore()
 
-    const l4 = ctx.createRadialGradient(hx, hy, 0, hx, hy, 120)
-    l4.addColorStop(0, 'rgba(56,189,248,0.08)'); l4.addColorStop(1, 'rgba(56,189,248,0)')
-    ctx.fillStyle = l4; ctx.beginPath(); ctx.arc(hx, hy, 120, 0, Math.PI * 2); ctx.fill()
+        // Pass 3 — sharp core, per-segment
+        ctx.lineWidth = 2
+        for (let i = 0; i < N_TRAIL; i++) {
+          ctx.strokeStyle = trailColor(i / N_TRAIL, 1.0)
+          ctx.beginPath()
+          ctx.moveTo(pts[i][0], pts[i][1])
+          ctx.lineTo(pts[i + 1][0], pts[i + 1][1])
+          ctx.stroke()
+        }
 
-    const l3 = ctx.createRadialGradient(hx, hy, 0, hx, hy, 60)
-    l3.addColorStop(0, 'rgba(56,189,248,0.3)');  l3.addColorStop(1, 'rgba(56,189,248,0)')
-    ctx.fillStyle = l3; ctx.beginPath(); ctx.arc(hx, hy, 60, 0, Math.PI * 2); ctx.fill()
+        // Hot point — 4 radial gradients, additive bloom
+        ctx.globalCompositeOperation = 'lighter'
 
-    const l2 = ctx.createRadialGradient(hx, hy, 0, hx, hy, 24)
-    l2.addColorStop(0, 'rgba(56,189,248,0.7)');  l2.addColorStop(1, 'rgba(56,189,248,0)')
-    ctx.fillStyle = l2; ctx.beginPath(); ctx.arc(hx, hy, 24, 0, Math.PI * 2); ctx.fill()
+        const l4 = ctx.createRadialGradient(hx, hy, 0, hx, hy, 120)
+        l4.addColorStop(0, 'rgba(56,189,248,0.08)'); l4.addColorStop(1, 'rgba(56,189,248,0)')
+        ctx.fillStyle = l4; ctx.beginPath(); ctx.arc(hx, hy, 120, 0, Math.PI * 2); ctx.fill()
 
-    const l1 = ctx.createRadialGradient(hx, hy, 0, hx, hy, 8)
-    l1.addColorStop(0, 'rgba(255,255,255,0.9)'); l1.addColorStop(1, 'rgba(255,255,255,0)')
-    ctx.fillStyle = l1; ctx.beginPath(); ctx.arc(hx, hy, 8, 0, Math.PI * 2); ctx.fill()
+        const l3 = ctx.createRadialGradient(hx, hy, 0, hx, hy, 60)
+        l3.addColorStop(0, 'rgba(56,189,248,0.3)');  l3.addColorStop(1, 'rgba(56,189,248,0)')
+        ctx.fillStyle = l3; ctx.beginPath(); ctx.arc(hx, hy, 60, 0, Math.PI * 2); ctx.fill()
 
-    // ── Fade comet canvas in/out — border stays visible via CSS ──────────
-    opacityRef.current = isHoveredRef.current
-      ? Math.min(1, opacityRef.current + 0.06)
-      : Math.max(0, opacityRef.current - 0.04)
-    canvas.style.opacity = String(opacityRef.current)
+        const l2 = ctx.createRadialGradient(hx, hy, 0, hx, hy, 24)
+        l2.addColorStop(0, 'rgba(56,189,248,0.7)');  l2.addColorStop(1, 'rgba(56,189,248,0)')
+        ctx.fillStyle = l2; ctx.beginPath(); ctx.arc(hx, hy, 24, 0, Math.PI * 2); ctx.fill()
 
-    if (opacityRef.current > 0 || isHoveredRef.current) {
-      rafRef.current = requestAnimationFrame(drawFrame)
-    }
-  }, [])
+        const l1 = ctx.createRadialGradient(hx, hy, 0, hx, hy, 8)
+        l1.addColorStop(0, 'rgba(255,255,255,0.9)'); l1.addColorStop(1, 'rgba(255,255,255,0)')
+        ctx.fillStyle = l1; ctx.beginPath(); ctx.arc(hx, hy, 8, 0, Math.PI * 2); ctx.fill()
+
+        // Reset globalAlpha after comet drawing
+        ctx.globalAlpha = 1
+      }
+
+      // ── Advance comet alpha ───────────────────────────────────────────────
+      cometAlphaRef.current = isHoveredRef.current
+        ? Math.min(1, cometAlphaRef.current + 0.06)
+        : Math.max(0, cometAlphaRef.current - 0.04)
+
+      // Keep looping while comet is visible; stop at rest (border persists on canvas)
+      if (isHoveredRef.current || cometAlphaRef.current > 0) {
+        rafRef.current = requestAnimationFrame(drawFrame)
+      }
+    },
+    [paintBorder],
+  )
 
   // ── Mouse handlers ────────────────────────────────────────────────────────
   const handleMouseEnter = useCallback(() => {
     isHoveredRef.current = true
     startTimeRef.current = 0
-    // Snap CSS border to hover brightness instantly
-    if (wrapperRef.current) wrapperRef.current.style.borderColor = 'rgba(56,189,248,0.4)'
     cancelAnimationFrame(rafRef.current)
     rafRef.current = requestAnimationFrame(drawFrame)
   }, [drawFrame])
@@ -167,36 +193,37 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
   const handleMouseLeave = useCallback(() => {
     isHoveredRef.current = false
     if (wrapperRef.current) {
-      // Snap CSS border back instantly
-      wrapperRef.current.style.borderColor = 'rgba(56,189,248,0.2)'
       wrapperRef.current.style.transform =
         'perspective(600px) rotateX(0deg) rotateY(0deg) translateY(0px)'
     }
-    // drawFrame self-cancels as canvas opacity reaches 0
+    // drawFrame continues while cometAlphaRef.current > 0 then self-cancels;
+    // the canvas retains the border at rest color from the last painted frame.
   }, [])
 
-  // ── ResizeObserver: keep canvas pixel dims in sync with wrapper ──────────
-  // One-time mount measurement misses content-driven height changes (e.g. Card 1
-  // taller than Cards 2/3). ResizeObserver fires on every layout change so the
-  // comet always draws in the correct coordinate space.
+  // ── ResizeObserver: keep canvas pixel dims in sync with wrapper ───────────
   useEffect(() => {
     const canvas  = canvasRef.current
     const wrapper = wrapperRef.current
     if (!canvas || !wrapper) return
 
     const syncCanvas = () => {
-      const cw = wrapper.offsetWidth  + OVERFLOW * 2
-      const ch = wrapper.offsetHeight + OVERFLOW * 2
-      // Only reassign when size actually changed — assigning clears the canvas
+      const w  = wrapper.offsetWidth
+      const h  = wrapper.offsetHeight
+      const cw = w + OVERFLOW * 2
+      const ch = h + OVERFLOW * 2
       if (canvas.width !== cw || canvas.height !== ch) {
         canvas.width  = cw
         canvas.height = ch
-        // CSS border on wrapper auto-updates with layout; nothing extra to draw
-        // at rest. If the comet rAF is running, the next frame redraws correctly.
+      }
+      // Paint border immediately so it's visible even when the rAF loop is stopped
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        ctx.clearRect(0, 0, cw, ch)
+        paintBorder(ctx, w, h, isHoveredRef.current)
       }
     }
 
-    syncCanvas()                       // immediate sync on mount
+    syncCanvas()
     const ro = new ResizeObserver(syncCanvas)
     ro.observe(wrapper)
 
@@ -204,7 +231,7 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
       ro.disconnect()
       cancelAnimationFrame(rafRef.current)
     }
-  }, [])
+  }, [paintBorder])
 
   // ── Reduced-motion fallback ───────────────────────────────────────────────
   if (shouldReduce) {
@@ -214,7 +241,7 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
         style={{
           position:     'relative',
           background:   '#111111',
-          border:       '1px solid rgba(56,189,248,0.2)',
+          border:       '1px solid rgba(56,189,248,0.25)',
           borderRadius: 2,
         }}
       >
@@ -230,8 +257,8 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
       style={{
         position:       'relative',
         background:     '#111111',
-        // CSS owns the complete, unbroken border — canvas draws only the comet
-        border:         '1px solid rgba(56,189,248,0.2)',
+        // No CSS border — border is drawn on canvas so it always matches
+        // the exact canvas coordinate space regardless of card height.
         borderRadius:   2,
         transition:     'transform 0.15s ease',
         transformStyle: 'preserve-3d',
@@ -241,10 +268,9 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
       onMouseLeave={handleMouseLeave}
     >
       {/*
-        Canvas extends OVERFLOW px past each card edge so the hot-point halo
-        bleeds into the page background.  opacity starts at 0 and is driven
-        purely by the rAF loop — the CSS border above is always fully visible
-        regardless of canvas opacity.
+        Canvas extends OVERFLOW px past each card edge (negative top/left)
+        so the hot-point halo bleeds into the page background.
+        opacity: 1 permanently — fade handled via ctx.globalAlpha on comet draws.
       */}
       <canvas
         ref={canvasRef}
@@ -256,7 +282,7 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
           height:        `calc(100% + ${OVERFLOW * 2}px)`,
           pointerEvents: 'none',
           zIndex:        10,
-          opacity:       0,
+          opacity:       1,
         }}
       />
       {children}
