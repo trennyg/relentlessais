@@ -31,6 +31,8 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
   const startTimeRef  = useRef<number>(0)
   const isHoveredRef  = useRef(false)
   const cometAlphaRef = useRef(0)   // 0..1 — comet fade via ctx.globalAlpha
+  const cardW         = useRef(0)   // cached by ResizeObserver, never read from DOM in rAF
+  const cardH         = useRef(0)
   const shouldReduce  = useReducedMotion() ?? false
 
   // ── paintBorder: card border rect in canvas coordinates ──────────────────
@@ -57,8 +59,8 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
       const ctx = canvas.getContext('2d')
       if (!ctx) return
 
-      const w  = wrapper.offsetWidth
-      const h  = wrapper.offsetHeight
+      const w  = cardW.current
+      const h  = cardH.current
       const cw = w + OVERFLOW * 2
       const ch = h + OVERFLOW * 2
       if (canvas.width !== cw || canvas.height !== ch) {
@@ -211,18 +213,19 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
     const syncCanvas = () => {
       const w  = wrapper.offsetWidth
       const h  = wrapper.offsetHeight
+      // Cache dimensions — drawFrame reads these refs, never the DOM
+      cardW.current = w
+      cardH.current = h
       const cw = w + OVERFLOW * 2
       const ch = h + OVERFLOW * 2
       if (canvas.width !== cw || canvas.height !== ch) {
         canvas.width  = cw
         canvas.height = ch
       }
-      // Paint border immediately so it's visible even when the rAF loop is stopped
-      const ctx = canvas.getContext('2d')
-      if (ctx) {
-        ctx.clearRect(0, 0, cw, ch)
-        paintBorder(ctx, w, h, isHoveredRef.current)
-      }
+      // Trigger one rAF so drawFrame repaints the border at the correct size
+      // immediately, even when the comet loop is not running
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = requestAnimationFrame(drawFrame)
     }
 
     syncCanvas()
@@ -233,7 +236,7 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
       ro.disconnect()
       cancelAnimationFrame(rafRef.current)
     }
-  }, [paintBorder])
+  }, [paintBorder, drawFrame])
 
   // ── Reduced-motion fallback ───────────────────────────────────────────────
   if (shouldReduce) {
