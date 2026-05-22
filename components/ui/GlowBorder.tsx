@@ -175,15 +175,35 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
     // drawFrame self-cancels as canvas opacity reaches 0
   }, [])
 
-  // ── Mount: init canvas pixel size, cleanup on unmount ────────────────────
+  // ── ResizeObserver: keep canvas pixel dims in sync with wrapper ──────────
+  // One-time mount measurement misses content-driven height changes (e.g. Card 1
+  // taller than Cards 2/3). ResizeObserver fires on every layout change so the
+  // comet always draws in the correct coordinate space.
   useEffect(() => {
     const canvas  = canvasRef.current
     const wrapper = wrapperRef.current
-    if (canvas && wrapper) {
-      canvas.width  = wrapper.offsetWidth  + OVERFLOW * 2
-      canvas.height = wrapper.offsetHeight + OVERFLOW * 2
+    if (!canvas || !wrapper) return
+
+    const syncCanvas = () => {
+      const cw = wrapper.offsetWidth  + OVERFLOW * 2
+      const ch = wrapper.offsetHeight + OVERFLOW * 2
+      // Only reassign when size actually changed — assigning clears the canvas
+      if (canvas.width !== cw || canvas.height !== ch) {
+        canvas.width  = cw
+        canvas.height = ch
+        // CSS border on wrapper auto-updates with layout; nothing extra to draw
+        // at rest. If the comet rAF is running, the next frame redraws correctly.
+      }
     }
-    return () => cancelAnimationFrame(rafRef.current)
+
+    syncCanvas()                       // immediate sync on mount
+    const ro = new ResizeObserver(syncCanvas)
+    ro.observe(wrapper)
+
+    return () => {
+      ro.disconnect()
+      cancelAnimationFrame(rafRef.current)
+    }
   }, [])
 
   // ── Reduced-motion fallback ───────────────────────────────────────────────
