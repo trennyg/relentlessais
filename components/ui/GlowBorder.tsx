@@ -184,8 +184,10 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
     const el = wrapperRef.current
     if (!el) return
     const r = el.getBoundingClientRect()
-    const x = (e.clientX - r.left) / r.width  - 0.5
-    const y = (e.clientY - r.top)  / r.height - 0.5
+    const rawX = (e.clientX - r.left) / r.width  - 0.5
+    const rawY = (e.clientY - r.top)  / r.height - 0.5
+    const x = Math.max(-0.5, Math.min(0.5, rawX))
+    const y = Math.max(-0.5, Math.min(0.5, rawY))
     el.style.transform =
       `perspective(600px) rotateX(${-y * 10}deg) rotateY(${x * 10}deg) translateY(-4px)`
   }, [])
