@@ -3,7 +3,7 @@
 import { useRef, useEffect, useCallback } from 'react'
 import { useReducedMotion } from 'framer-motion'
 
-const OVERFLOW       = 120
+const OVERFLOW       = 160   // canvas bleeds 160 px past each card edge
 const ORBIT_DURATION = 4
 const TRAIL_FRACTION = 0.35
 const N_TRAIL        = 60
@@ -13,7 +13,7 @@ interface GlowBorderProps {
   className?: string
 }
 
-// ── Point on card perimeter at normalised position t (0..1, clockwise) ───────
+// ── Point on card perimeter at normalised t (0..1, clockwise) ────────────────
 function perimPoint(t: number, w: number, h: number): [number, number] {
   const norm  = ((t % 1) + 1) % 1
   const perim = 2 * (w + h)
@@ -23,6 +23,119 @@ function perimPoint(t: number, w: number, h: number): [number, number] {
   if (dist < 2*w + h)   return [w-(dist-w-h),  h             ]   // bot   R→L
   return                       [0,              h-(dist-2*w-h)]   // left  B→T
 }
+
+// ── Build the N_TRAIL+1 canvas-coord trail points for a given headT ───────────
+function buildTrail(
+  headT:    number,
+  w:        number,
+  h:        number,
+  overflow: number,
+): [number, number][] {
+  const pts: [number, number][] = []
+  for (let i = 0; i <= N_TRAIL; i++) {
+    const t = headT - TRAIL_FRACTION + (i / N_TRAIL) * TRAIL_FRACTION
+    const [px, py] = perimPoint(t, w, h)
+    pts.push([px + overflow, py + overflow])
+  }
+  return pts
+}
+
+// ── Draw one comet (trail + hot-point bloom) ──────────────────────────────────
+// ctx.globalAlpha must be pre-set by the caller for the comet-fade effect.
+// rgb:        body colour  [r, g, b]
+// alphaScale: intensity multiplier (1.0 = full, 0.70 = ghost comet)
+function drawComet(
+  ctx:        CanvasRenderingContext2D,
+  pts:        [number, number][],
+  rgb:        [number, number, number],
+  alphaScale: number,
+): void {
+  const [hx, hy] = pts[N_TRAIL]
+  const [r0, g0, b0] = rgb
+
+  // Body colour → white-hot tip in final 10% of trail
+  const trailColor = (p: number, scale: number): string => {
+    const alpha     = p * scale * alphaScale
+    const whiteness = Math.max(0, (p - 0.90) / 0.10)
+    const r = Math.round(r0 + (255 - r0) * whiteness)
+    const g = Math.round(g0 + (255 - g0) * whiteness)
+    const b = Math.round(b0 + (255 - b0) * whiteness)
+    return `rgba(${r},${g},${b},${alpha.toFixed(3)})`
+  }
+
+  // All passes use butt caps — eliminates the round dot artefact at pts[0]
+  ctx.lineCap  = 'butt'
+  ctx.lineJoin = 'round'
+
+  // Pass 1 — broad ambient glow (per-segment with butt cap, blurred)
+  ctx.save()
+  ctx.filter    = 'blur(20px)'
+  ctx.lineWidth = 10
+  for (let i = 0; i < N_TRAIL; i++) {
+    ctx.strokeStyle = trailColor(i / N_TRAIL, 0.45)
+    ctx.beginPath()
+    ctx.moveTo(pts[i][0], pts[i][1])
+    ctx.lineTo(pts[i + 1][0], pts[i + 1][1])
+    ctx.stroke()
+  }
+  ctx.restore()
+
+  // Pass 2 — medium glow, per-segment alpha
+  ctx.save()
+  ctx.filter    = 'blur(5px)'
+  ctx.lineWidth = 4
+  for (let i = 0; i < N_TRAIL; i++) {
+    ctx.strokeStyle = trailColor(i / N_TRAIL, 0.85)
+    ctx.beginPath()
+    ctx.moveTo(pts[i][0], pts[i][1])
+    ctx.lineTo(pts[i + 1][0], pts[i + 1][1])
+    ctx.stroke()
+  }
+  ctx.restore()
+
+  // Pass 3 — sharp core, per-segment
+  ctx.lineWidth = 2
+  for (let i = 0; i < N_TRAIL; i++) {
+    ctx.strokeStyle = trailColor(i / N_TRAIL, 1.0)
+    ctx.beginPath()
+    ctx.moveTo(pts[i][0], pts[i][1])
+    ctx.lineTo(pts[i + 1][0], pts[i + 1][1])
+    ctx.stroke()
+  }
+
+  // ── Hot-point bloom — 4 radial gradients with additive compositing ────────
+  ctx.globalCompositeOperation = 'lighter'
+  const rStr = `${r0},${g0},${b0}`
+
+  // Layer 4: outer halo bleed  r = 160
+  const l4 = ctx.createRadialGradient(hx, hy, 0, hx, hy, 160)
+  l4.addColorStop(0, `rgba(${rStr},${(0.10 * alphaScale).toFixed(3)})`)
+  l4.addColorStop(1, `rgba(${rStr},0)`)
+  ctx.fillStyle = l4; ctx.beginPath(); ctx.arc(hx, hy, 160, 0, Math.PI * 2); ctx.fill()
+
+  // Layer 3: blue spread  r = 80
+  const l3 = ctx.createRadialGradient(hx, hy, 0, hx, hy, 80)
+  l3.addColorStop(0, `rgba(${rStr},${(0.30 * alphaScale).toFixed(3)})`)
+  l3.addColorStop(1, `rgba(${rStr},0)`)
+  ctx.fillStyle = l3; ctx.beginPath(); ctx.arc(hx, hy, 80, 0, Math.PI * 2); ctx.fill()
+
+  // Layer 2: mid  r = 32
+  const l2 = ctx.createRadialGradient(hx, hy, 0, hx, hy, 32)
+  l2.addColorStop(0, `rgba(${rStr},${(0.70 * alphaScale).toFixed(3)})`)
+  l2.addColorStop(1, `rgba(${rStr},0)`)
+  ctx.fillStyle = l2; ctx.beginPath(); ctx.arc(hx, hy, 32, 0, Math.PI * 2); ctx.fill()
+
+  // Layer 1: white-hot core  r = 10
+  const l1 = ctx.createRadialGradient(hx, hy, 0, hx, hy, 10)
+  l1.addColorStop(0, `rgba(255,255,255,${(0.90 * alphaScale).toFixed(3)})`)
+  l1.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = l1; ctx.beginPath(); ctx.arc(hx, hy, 10, 0, Math.PI * 2); ctx.fill()
+
+  // Reset composite mode for next draw call
+  ctx.globalCompositeOperation = 'source-over'
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function GlowBorder({ children, className }: GlowBorderProps) {
   const wrapperRef    = useRef<HTMLDivElement>(null)
@@ -55,91 +168,25 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
 
       ctx.clearRect(0, 0, cw, ch)
 
-      // ── Comet — only when partially/fully visible ─────────────────────────
+      // ── Two comets — only drawn when partially/fully visible ──────────────
       const ca = cometAlphaRef.current
       if (ca > 0) {
         if (!startTimeRef.current) startTimeRef.current = timestamp
         const headT =
           ((timestamp - startTimeRef.current) / 1000 % ORBIT_DURATION) / ORBIT_DURATION
 
-        const pts: [number, number][] = []
-        for (let i = 0; i <= N_TRAIL; i++) {
-          const t = headT - TRAIL_FRACTION + (i / N_TRAIL) * TRAIL_FRACTION
-          const [px, py] = perimPoint(t, w, h)
-          pts.push([px + OVERFLOW, py + OVERFLOW])
-        }
-        const [hx, hy] = pts[N_TRAIL]
+        // Comet A: blue  — at headT
+        const ptsA = buildTrail(headT,       w, h, OVERFLOW)
+        // Comet B: ghost white — half perimeter behind (headT + 0.5 wraps via perimPoint)
+        const ptsB = buildTrail(headT + 0.5, w, h, OVERFLOW)
 
-        // Colour helper: blue body → white tip in final 10%
-        const trailColor = (p: number, scale: number): string => {
-          const alpha     = p * scale
-          const whiteness = Math.max(0, (p - 0.90) / 0.10)
-          const r = Math.round(56  + (255 - 56)  * whiteness)
-          const g = Math.round(189 + (255 - 189) * whiteness)
-          const b = Math.round(248 + (255 - 248) * whiteness)
-          return `rgba(${r},${g},${b},${alpha.toFixed(3)})`
-        }
-
-        // Apply comet fade via globalAlpha — paintBorder is already done at 1
+        // Apply fade to both comets via globalAlpha
         ctx.globalAlpha = ca
         ctx.globalCompositeOperation = 'source-over'
-        ctx.lineCap  = 'round'
-        ctx.lineJoin = 'round'
 
-        // Pass 1 — broad ambient glow (single path, blurred)
-        ctx.save()
-        ctx.filter      = 'blur(20px)'
-        ctx.lineWidth   = 10
-        ctx.strokeStyle = 'rgba(56,189,248,0.45)'
-        ctx.beginPath()
-        ctx.moveTo(pts[0][0], pts[0][1])
-        for (let i = 1; i <= N_TRAIL; i++) ctx.lineTo(pts[i][0], pts[i][1])
-        ctx.stroke()
-        ctx.restore()
+        drawComet(ctx, ptsA, [56, 189, 248],  1.00)   // blue comet
+        drawComet(ctx, ptsB, [220, 230, 255], 0.70)   // ghost white comet
 
-        // Pass 2 — medium glow, per-segment alpha
-        ctx.save()
-        ctx.filter    = 'blur(5px)'
-        ctx.lineWidth = 4
-        for (let i = 0; i < N_TRAIL; i++) {
-          ctx.strokeStyle = trailColor(i / N_TRAIL, 0.85)
-          ctx.beginPath()
-          ctx.moveTo(pts[i][0], pts[i][1])
-          ctx.lineTo(pts[i + 1][0], pts[i + 1][1])
-          ctx.stroke()
-        }
-        ctx.restore()
-
-        // Pass 3 — sharp core, per-segment
-        ctx.lineWidth = 2
-        for (let i = 0; i < N_TRAIL; i++) {
-          ctx.strokeStyle = trailColor(i / N_TRAIL, 1.0)
-          ctx.beginPath()
-          ctx.moveTo(pts[i][0], pts[i][1])
-          ctx.lineTo(pts[i + 1][0], pts[i + 1][1])
-          ctx.stroke()
-        }
-
-        // Hot point — 4 radial gradients, additive bloom
-        ctx.globalCompositeOperation = 'lighter'
-
-        const l4 = ctx.createRadialGradient(hx, hy, 0, hx, hy, 120)
-        l4.addColorStop(0, 'rgba(56,189,248,0.08)'); l4.addColorStop(1, 'rgba(56,189,248,0)')
-        ctx.fillStyle = l4; ctx.beginPath(); ctx.arc(hx, hy, 120, 0, Math.PI * 2); ctx.fill()
-
-        const l3 = ctx.createRadialGradient(hx, hy, 0, hx, hy, 60)
-        l3.addColorStop(0, 'rgba(56,189,248,0.3)');  l3.addColorStop(1, 'rgba(56,189,248,0)')
-        ctx.fillStyle = l3; ctx.beginPath(); ctx.arc(hx, hy, 60, 0, Math.PI * 2); ctx.fill()
-
-        const l2 = ctx.createRadialGradient(hx, hy, 0, hx, hy, 24)
-        l2.addColorStop(0, 'rgba(56,189,248,0.7)');  l2.addColorStop(1, 'rgba(56,189,248,0)')
-        ctx.fillStyle = l2; ctx.beginPath(); ctx.arc(hx, hy, 24, 0, Math.PI * 2); ctx.fill()
-
-        const l1 = ctx.createRadialGradient(hx, hy, 0, hx, hy, 8)
-        l1.addColorStop(0, 'rgba(255,255,255,0.9)'); l1.addColorStop(1, 'rgba(255,255,255,0)')
-        ctx.fillStyle = l1; ctx.beginPath(); ctx.arc(hx, hy, 8, 0, Math.PI * 2); ctx.fill()
-
-        // Reset globalAlpha after comet drawing
         ctx.globalAlpha = 1
       }
 
@@ -148,7 +195,6 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
         ? Math.min(1, cometAlphaRef.current + 0.06)
         : Math.max(0, cometAlphaRef.current - 0.04)
 
-      // Keep looping while comet is visible; stop at rest (border persists on canvas)
       if (isHoveredRef.current || cometAlphaRef.current > 0) {
         rafRef.current = requestAnimationFrame(drawFrame)
       }
@@ -182,8 +228,7 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
       wrapperRef.current.style.transform =
         'perspective(600px) rotateX(0deg) rotateY(0deg) translateY(0px)'
     }
-    // drawFrame continues while cometAlphaRef.current > 0 then self-cancels;
-    // the canvas retains the border at rest color from the last painted frame.
+    // drawFrame continues while cometAlphaRef.current > 0 then self-cancels
   }, [])
 
   // ── ResizeObserver: keep canvas pixel dims in sync with wrapper ───────────
@@ -253,8 +298,8 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
       onMouseLeave={handleMouseLeave}
     >
       {/*
-        Canvas extends OVERFLOW px past each card edge (negative top/left)
-        so the hot-point halo bleeds into the page background.
+        Canvas extends OVERFLOW (160) px past each card edge via negative
+        top/left so the hot-point halo bleeds into the page background.
         opacity: 1 permanently — fade handled via ctx.globalAlpha on comet draws.
       */}
       <canvas
