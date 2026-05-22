@@ -47,6 +47,7 @@ function buildTrail(
 function drawComet(
   ctx:        CanvasRenderingContext2D,
   pts:        [number, number][],
+  smokePts:   [number, number][],   // TRAIL_FRACTION further back than pts
   rgb:        [number, number, number],
   alphaScale: number,
 ): void {
@@ -102,6 +103,22 @@ function drawComet(
     ctx.lineTo(pts[i + 1][0], pts[i + 1][1])
     ctx.stroke()
   }
+
+  // Pass 4 — smoke / afterglow (region behind the main tail)
+  // Opacity ramps 0 at far end → 0.12 at join with main trail.
+  ctx.save()
+  ctx.filter    = 'blur(28px)'
+  ctx.lineWidth = 8
+  ctx.lineCap   = 'butt'
+  for (let i = 0; i < N_TRAIL; i++) {
+    const alpha = (i / N_TRAIL) * 0.12 * alphaScale
+    ctx.strokeStyle = `rgba(${r0},${g0},${b0},${alpha.toFixed(3)})`
+    ctx.beginPath()
+    ctx.moveTo(smokePts[i][0], smokePts[i][1])
+    ctx.lineTo(smokePts[i + 1][0], smokePts[i + 1][1])
+    ctx.stroke()
+  }
+  ctx.restore()
 
   // ── Hot-point bloom — 4 radial gradients with additive compositing ────────
   ctx.globalCompositeOperation = 'lighter'
@@ -176,16 +193,18 @@ export default function GlowBorder({ children, className }: GlowBorderProps) {
           ((timestamp - startTimeRef.current) / 1000 % ORBIT_DURATION) / ORBIT_DURATION
 
         // Comet A: blue  — at headT
-        const ptsA = buildTrail(headT,       w, h, OVERFLOW)
+        const ptsA      = buildTrail(headT,                    w, h, OVERFLOW)
+        const smokeA    = buildTrail(headT       - TRAIL_FRACTION, w, h, OVERFLOW)
         // Comet B: ghost white — half perimeter behind (headT + 0.5 wraps via perimPoint)
-        const ptsB = buildTrail(headT + 0.5, w, h, OVERFLOW)
+        const ptsB      = buildTrail(headT + 0.5,              w, h, OVERFLOW)
+        const smokeB    = buildTrail(headT + 0.5 - TRAIL_FRACTION, w, h, OVERFLOW)
 
         // Apply fade to both comets via globalAlpha
         ctx.globalAlpha = ca
         ctx.globalCompositeOperation = 'source-over'
 
-        drawComet(ctx, ptsA, [56, 189, 248],  1.00)   // blue comet
-        drawComet(ctx, ptsB, [220, 230, 255], 0.70)   // ghost white comet
+        drawComet(ctx, ptsA, smokeA, [56, 189, 248],  1.00)   // blue comet
+        drawComet(ctx, ptsB, smokeB, [220, 230, 255], 0.70)   // ghost white comet
 
         ctx.globalAlpha = 1
       }
